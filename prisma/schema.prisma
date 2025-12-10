@@ -1,0 +1,93 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               Int           @id @default(autoincrement())
+  fullName         String
+  email            String        @unique
+  password         String
+  role             String?       @default("student")
+  createdAt        DateTime      @default(now())
+  documents        Document[]
+  userProfile      UserProfile?  // Relation defined on UserProfile side
+}
+
+model Document {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  type       DocumentType
+  fileUrl    String
+  fileName   String
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model UserProfile {
+  id                     Int       @id @default(autoincrement())
+  userId                 Int       @unique
+  user                   User      @relation(fields: [userId], references: [id])
+  
+  // Personal Information
+  firstName              String?
+  lastName               String?
+  phoneNumber            String?
+  dateOfBirth            DateTime?
+  nationality            String?
+  gender                 String?
+  
+  // Academic Information
+  currentEducationLevel  EducationLevel?
+  institutionName        String?
+  fieldOfStudy           String?
+  ieltsScore             Float?
+  cgpa                   Float?
+  academicYear           Int?
+  
+  // Study Preferences
+  desiredProgram         String?
+  preferredCountry       String?
+  budgetRangeMin         Int?
+  budgetRangeMax         Int?
+  preferredIntake        String?
+  studyMode              StudyMode?
+  
+  // Additional Info
+  workExperience         Int?     // in years
+  researchExperience     Boolean? @default(false)
+  publications           Int?     @default(0)
+  
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+enum DocumentType {
+  ACADEMIC_TRANSCRIPT
+  DEGREE_DIPLOMA
+  LANGUAGE_PROFICIENCY
+  PASSPORT_COPY
+  RESUME_CV
+  STATEMENT_OF_PURPOSE
+}
+
+enum EducationLevel {
+  HIGH_SCHOOL
+  BACHELORS
+  MASTERS
+  PHD
+  POST_DOCTORAL
+}
+
+enum StudyMode {
+  FULL_TIME
+  PART_TIME
+  ONLINE
+  HYBRID
+}

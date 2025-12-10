@@ -1,0 +1,17 @@
+-- CreateEnum
+CREATE TYPE "DocumentType" AS ENUM ('ACADEMIC_TRANSCRIPT', 'DEGREE_DIPLOMA', 'LANGUAGE_PROFICIENCY', 'PASSPORT_COPY', 'RESUME_CV', 'STATEMENT_OF_PURPOSE');
+
+-- CreateTable
+CREATE TABLE "Document" (
+    "id" SERIAL NOT NULL,
+    "userId" INTEGER NOT NULL,
+    "type" "DocumentType" NOT NULL,
+    "fileUrl" TEXT NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Document_pkey" PRIMARY KEY ("id")
+);
+
+-- AddForeignKey
+ALTER TABLE "Document" ADD CONSTRAINT "Document_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
