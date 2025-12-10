@@ -1,0 +1,44 @@
+# Environment variables
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Node modules
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# Logs
+logs/
+*.log
+log.txt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build/Dist
+dist/
+build/
+out/
+
+# Python (if any)
+__pycache__/
+*.py[cod]
+
+# IDE files
+.vscode/
+*.swp
+
+# Temporary files
+*.tmp
+*.temp
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

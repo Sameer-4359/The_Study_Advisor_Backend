@@ -2,8 +2,7 @@ const multer = require("multer");
 const multerS3 = require("multer-s3");
 const s3 = require("../AWS/aws");
 
-// const bucketName = "The_Study_Advisor_Docs";
-// const cloudFrontUrl = "https://d1z3lwp95i97f9.cloudfront.net";
+
 const bucketName = 'tapbot-website-info';
 const cloudFrontUrl = "https://d1augqcjseb2ys.cloudfront.net";
 
