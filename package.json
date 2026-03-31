@@ -4,21 +4,30 @@
   "main": "app.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node server.js",
+    "ingest:pdfs": "node scripts/ingest-pdfs.mjs",
+    "reset:vector-db": "node scripts/reset-db.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@langchain/core": "^1.1.36",
+    "@langchain/google-genai": "^2.1.26",
+    "@langchain/pinecone": "^1.0.1",
+    "@langchain/textsplitters": "^1.0.1",
+    "@pinecone-database/pinecone": "^5.1.2",
     "@prisma/client": "^6.18.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "fs-extra": "^11.3.4",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
     "multer-s3": "^3.0.1",
+    "pdf-parse": "^2.4.5",
     "prisma": "^6.18.0"
   }
 }

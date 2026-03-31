@@ -48,25 +48,37 @@ app.get("/", (req, res) =>
   })
 );
 
-// 404 handler
-app.use((req, res, next) => {
-  res.status(404).json({
-    status: "error",
-    message: "API endpoint not found",
-    path: req.originalUrl
-  });
-});
+async function startServer() {
+  try {
+    const chatModule = await import("./routes/chat.mjs");
+    app.use("/api/chat", chatModule.default);
+    console.log("RAG chat mounted at POST /api/chat");
+  } catch (err) {
+    console.error("Could not load RAG chat routes (routes/chat.mjs):", err.message);
+  }
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    status: "error",
-    message: "Internal server error",
-    ...(process.env.NODE_ENV === "development" && { error: err.message }),
+  // 404 handler (must be after all routes)
+  app.use((req, res, next) => {
+    res.status(404).json({
+      status: "error",
+      message: "API endpoint not found",
+      path: req.originalUrl
+    });
   });
-});
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+  // Error handling middleware
+  app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      ...(process.env.NODE_ENV === "development" && { error: err.message }),
+    });
+  });
+
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
+
+startServer();
