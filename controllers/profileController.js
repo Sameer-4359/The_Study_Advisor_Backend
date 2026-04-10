@@ -1,27 +1,28 @@
 // controllers/profileController.js
 const prisma = require("../prisma/client");
+const { emitStudentActivity } = require("../services/activity.service");
 
 // Validation functions
 const validateEducationProgression = (currentLevel, desiredProgram) => {
   const educationOrder = {
-    'HIGH_SCHOOL': 1,
-    'BACHELORS': 2,
-    'MASTERS': 3,
-    'PHD': 4,
-    'POST_DOCTORAL': 5
+    HIGH_SCHOOL: 1,
+    BACHELORS: 2,
+    MASTERS: 3,
+    PHD: 4,
+    POST_DOCTORAL: 5,
   };
 
   const programOrder = {
-    'BACHELORS': 1,
-    'MASTERS': 2,
-    'PHD': 3,
-    'POST_DOCTORAL': 4
+    BACHELORS: 1,
+    MASTERS: 2,
+    PHD: 3,
+    POST_DOCTORAL: 4,
   };
 
   if (currentLevel && desiredProgram) {
     const currentLevelOrder = educationOrder[currentLevel.toUpperCase()] || 0;
     const desiredProgramOrder = programOrder[desiredProgram.toUpperCase()] || 0;
-    
+
     // Allow same or higher level
     if (desiredProgramOrder < currentLevelOrder) {
       return false;
@@ -43,24 +44,24 @@ exports.getProfile = async (req, res) => {
             id: true,
             fullName: true,
             email: true,
-            role: true
-          }
-        }
-      }
+            role: true,
+          },
+        },
+      },
     });
 
     if (!profile) {
       return res.status(200).json({
         status: "success",
         message: "Profile not found. Please complete your profile.",
-        profile: null
+        profile: null,
       });
     }
 
     return res.status(200).json({
       status: "success",
       message: "Profile retrieved successfully",
-      profile
+      profile,
     });
   } catch (err) {
     console.error("GET_PROFILE_ERROR:", err);
@@ -83,7 +84,7 @@ exports.updateProfile = async (req, res) => {
       dateOfBirth,
       nationality,
       gender,
-      
+
       // Academic Info
       currentEducationLevel,
       institutionName,
@@ -91,7 +92,7 @@ exports.updateProfile = async (req, res) => {
       ieltsScore,
       cgpa,
       academicYear,
-      
+
       // Study Preferences
       desiredProgram,
       preferredCountry,
@@ -99,24 +100,25 @@ exports.updateProfile = async (req, res) => {
       budgetRangeMax,
       preferredIntake,
       studyMode,
-      
+
       // Additional Info
       workExperience,
       researchExperience,
-      publications
+      publications,
     } = req.body;
 
     // Validate education progression
     if (currentEducationLevel && desiredProgram) {
       const isValidProgression = validateEducationProgression(
-        currentEducationLevel, 
-        desiredProgram
+        currentEducationLevel,
+        desiredProgram,
       );
-      
+
       if (!isValidProgression) {
         return res.status(400).json({
           status: "error",
-          message: "Invalid education progression. You cannot apply for a program lower than your current education level."
+          message:
+            "Invalid education progression. You cannot apply for a program lower than your current education level.",
         });
       }
     }
@@ -125,7 +127,7 @@ exports.updateProfile = async (req, res) => {
     if (ieltsScore && (ieltsScore < 0 || ieltsScore > 9)) {
       return res.status(400).json({
         status: "error",
-        message: "IELTS score must be between 0 and 9"
+        message: "IELTS score must be between 0 and 9",
       });
     }
 
@@ -133,7 +135,7 @@ exports.updateProfile = async (req, res) => {
     if (cgpa && (cgpa < 0 || cgpa > 4.0)) {
       return res.status(400).json({
         status: "error",
-        message: "CGPA must be between 0 and 4.0"
+        message: "CGPA must be between 0 and 4.0",
       });
     }
 
@@ -141,7 +143,7 @@ exports.updateProfile = async (req, res) => {
     if (budgetRangeMin && budgetRangeMax && budgetRangeMin > budgetRangeMax) {
       return res.status(400).json({
         status: "error",
-        message: "Minimum budget cannot be greater than maximum budget"
+        message: "Minimum budget cannot be greater than maximum budget",
       });
     }
 
@@ -152,18 +154,18 @@ exports.updateProfile = async (req, res) => {
       if (isNaN(parsedDateOfBirth.getTime())) {
         return res.status(400).json({
           status: "error",
-          message: "Invalid date format for date of birth"
+          message: "Invalid date format for date of birth",
         });
       }
     }
 
     // Check if profile exists
     const existingProfile = await prisma.userProfile.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     let profile;
-    
+
     if (existingProfile) {
       // Update existing profile
       profile = await prisma.userProfile.update({
@@ -176,28 +178,33 @@ exports.updateProfile = async (req, res) => {
           dateOfBirth: parsedDateOfBirth || existingProfile.dateOfBirth,
           nationality: nationality || existingProfile.nationality,
           gender: gender || existingProfile.gender,
-          
+
           // Academic Info
-          currentEducationLevel: currentEducationLevel || existingProfile.currentEducationLevel,
+          currentEducationLevel:
+            currentEducationLevel || existingProfile.currentEducationLevel,
           institutionName: institutionName || existingProfile.institutionName,
           fieldOfStudy: fieldOfStudy || existingProfile.fieldOfStudy,
-          ieltsScore: ieltsScore ? parseFloat(ieltsScore) : existingProfile.ieltsScore,
+          ieltsScore: ieltsScore
+            ? parseFloat(ieltsScore)
+            : existingProfile.ieltsScore,
           cgpa: cgpa ? parseFloat(cgpa) : existingProfile.cgpa,
           academicYear: academicYear || existingProfile.academicYear,
-          
+
           // Study Preferences
           desiredProgram: desiredProgram || existingProfile.desiredProgram,
-          preferredCountry: preferredCountry || existingProfile.preferredCountry,
+          preferredCountry:
+            preferredCountry || existingProfile.preferredCountry,
           budgetRangeMin: budgetRangeMin || existingProfile.budgetRangeMin,
           budgetRangeMax: budgetRangeMax || existingProfile.budgetRangeMax,
           preferredIntake: preferredIntake || existingProfile.preferredIntake,
           studyMode: studyMode || existingProfile.studyMode,
-          
+
           // Additional Info
           workExperience: workExperience || existingProfile.workExperience,
-          researchExperience: researchExperience || existingProfile.researchExperience,
-          publications: publications || existingProfile.publications
-        }
+          researchExperience:
+            researchExperience || existingProfile.researchExperience,
+          publications: publications || existingProfile.publications,
+        },
       });
     } else {
       // Create new profile
@@ -211,7 +218,7 @@ exports.updateProfile = async (req, res) => {
           dateOfBirth: parsedDateOfBirth,
           nationality,
           gender,
-          
+
           // Academic Info
           currentEducationLevel,
           institutionName,
@@ -219,7 +226,7 @@ exports.updateProfile = async (req, res) => {
           ieltsScore: ieltsScore ? parseFloat(ieltsScore) : null,
           cgpa: cgpa ? parseFloat(cgpa) : null,
           academicYear,
-          
+
           // Study Preferences
           desiredProgram,
           preferredCountry,
@@ -227,30 +234,45 @@ exports.updateProfile = async (req, res) => {
           budgetRangeMax,
           preferredIntake,
           studyMode,
-          
+
           // Additional Info
           workExperience,
           researchExperience,
-          publications
-        }
+          publications,
+        },
       });
     }
 
+    await emitStudentActivity({
+      studentId: userId,
+      actorId: userId,
+      eventType: "PROFILE_UPDATED",
+      description: existingProfile
+        ? "Student updated profile information"
+        : "Student completed initial profile",
+      metadata: {
+        hasDesiredProgram: Boolean(profile.desiredProgram),
+        hasPreferredCountry: Boolean(profile.preferredCountry),
+      },
+    });
+
     return res.status(200).json({
       status: "success",
-      message: existingProfile ? "Profile updated successfully" : "Profile created successfully",
-      profile
+      message: existingProfile
+        ? "Profile updated successfully"
+        : "Profile created successfully",
+      profile,
     });
   } catch (err) {
     console.error("UPDATE_PROFILE_ERROR:", err);
-    
-    if (err.code === 'P2002') {
+
+    if (err.code === "P2002") {
       return res.status(400).json({
         status: "error",
-        message: "Profile already exists for this user"
+        message: "Profile already exists for this user",
       });
     }
-    
+
     return res.status(500).json({
       status: "error",
       message: "Failed to update profile",
@@ -265,23 +287,23 @@ exports.deleteProfile = async (req, res) => {
 
     // Check if profile exists
     const existingProfile = await prisma.userProfile.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     if (!existingProfile) {
       return res.status(404).json({
         status: "error",
-        message: "Profile not found"
+        message: "Profile not found",
       });
     }
 
     await prisma.userProfile.delete({
-      where: { userId }
+      where: { userId },
     });
 
     return res.status(200).json({
       status: "success",
-      message: "Profile deleted successfully"
+      message: "Profile deleted successfully",
     });
   } catch (err) {
     console.error("DELETE_PROFILE_ERROR:", err);
@@ -298,7 +320,7 @@ exports.getProfileCompletion = async (req, res) => {
     const userId = req.user.id;
 
     const profile = await prisma.userProfile.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     if (!profile) {
@@ -307,29 +329,37 @@ exports.getProfileCompletion = async (req, res) => {
         completionPercentage: 0,
         completedFields: [],
         missingFields: [
-          'firstName', 'lastName', 'phoneNumber', 'dateOfBirth', 'nationality',
-          'currentEducationLevel', 'institutionName', 'fieldOfStudy',
-          'desiredProgram', 'preferredCountry', 'preferredIntake'
-        ]
+          "firstName",
+          "lastName",
+          "phoneNumber",
+          "dateOfBirth",
+          "nationality",
+          "currentEducationLevel",
+          "institutionName",
+          "fieldOfStudy",
+          "desiredProgram",
+          "preferredCountry",
+          "preferredIntake",
+        ],
       });
     }
 
     // Define required fields and their weights
     const fields = [
-      { key: 'firstName', weight: 5 },
-      { key: 'lastName', weight: 5 },
-      { key: 'phoneNumber', weight: 5 },
-      { key: 'dateOfBirth', weight: 5 },
-      { key: 'nationality', weight: 5 },
-      { key: 'currentEducationLevel', weight: 10 },
-      { key: 'institutionName', weight: 10 },
-      { key: 'fieldOfStudy', weight: 10 },
-      { key: 'ieltsScore', weight: 5 },
-      { key: 'cgpa', weight: 10 },
-      { key: 'desiredProgram', weight: 10 },
-      { key: 'preferredCountry', weight: 10 },
-      { key: 'preferredIntake', weight: 5 },
-      { key: 'studyMode', weight: 5 }
+      { key: "firstName", weight: 5 },
+      { key: "lastName", weight: 5 },
+      { key: "phoneNumber", weight: 5 },
+      { key: "dateOfBirth", weight: 5 },
+      { key: "nationality", weight: 5 },
+      { key: "currentEducationLevel", weight: 10 },
+      { key: "institutionName", weight: 10 },
+      { key: "fieldOfStudy", weight: 10 },
+      { key: "ieltsScore", weight: 5 },
+      { key: "cgpa", weight: 10 },
+      { key: "desiredProgram", weight: 10 },
+      { key: "preferredCountry", weight: 10 },
+      { key: "preferredIntake", weight: 5 },
+      { key: "studyMode", weight: 5 },
     ];
 
     let totalWeight = 0;
@@ -337,10 +367,14 @@ exports.getProfileCompletion = async (req, res) => {
     const completedFields = [];
     const missingFields = [];
 
-    fields.forEach(field => {
+    fields.forEach((field) => {
       totalWeight += field.weight;
-      
-      if (profile[field.key] !== null && profile[field.key] !== undefined && profile[field.key] !== '') {
+
+      if (
+        profile[field.key] !== null &&
+        profile[field.key] !== undefined &&
+        profile[field.key] !== ""
+      ) {
         completedWeight += field.weight;
         completedFields.push(field.key);
       } else {
@@ -348,7 +382,9 @@ exports.getProfileCompletion = async (req, res) => {
       }
     });
 
-    const completionPercentage = Math.round((completedWeight / totalWeight) * 100);
+    const completionPercentage = Math.round(
+      (completedWeight / totalWeight) * 100,
+    );
 
     return res.status(200).json({
       status: "success",
@@ -356,10 +392,13 @@ exports.getProfileCompletion = async (req, res) => {
       completedFields,
       missingFields,
       profileSummary: {
-        personalInfoCompleted: profile.firstName && profile.lastName && profile.phoneNumber,
-        academicInfoCompleted: profile.currentEducationLevel && profile.institutionName,
-        preferencesCompleted: profile.desiredProgram && profile.preferredCountry
-      }
+        personalInfoCompleted:
+          profile.firstName && profile.lastName && profile.phoneNumber,
+        academicInfoCompleted:
+          profile.currentEducationLevel && profile.institutionName,
+        preferencesCompleted:
+          profile.desiredProgram && profile.preferredCountry,
+      },
     });
   } catch (err) {
     console.error("PROFILE_COMPLETION_ERROR:", err);
@@ -374,15 +413,32 @@ exports.getProfileCompletion = async (req, res) => {
 exports.getCountries = async (req, res) => {
   try {
     const countries = [
-      "United States", "United Kingdom", "Canada", "Australia", "Germany",
-      "France", "Netherlands", "Sweden", "Norway", "Denmark",
-      "Switzerland", "Ireland", "New Zealand", "Singapore", "Malaysia",
-      "Japan", "South Korea", "China", "Italy", "Spain", "Pakistan"
+      "United States",
+      "United Kingdom",
+      "Canada",
+      "Australia",
+      "Germany",
+      "France",
+      "Netherlands",
+      "Sweden",
+      "Norway",
+      "Denmark",
+      "Switzerland",
+      "Ireland",
+      "New Zealand",
+      "Singapore",
+      "Malaysia",
+      "Japan",
+      "South Korea",
+      "China",
+      "Italy",
+      "Spain",
+      "Pakistan",
     ].sort();
 
     return res.status(200).json({
       status: "success",
-      countries
+      countries,
     });
   } catch (err) {
     console.error("GET_COUNTRIES_ERROR:", err);
@@ -401,12 +457,12 @@ exports.getEducationLevels = async (req, res) => {
       { value: "BACHELORS", label: "Bachelor's Degree" },
       { value: "MASTERS", label: "Master's Degree" },
       { value: "PHD", label: "PhD/Doctorate" },
-      { value: "POST_DOCTORAL", label: "Post Doctoral" }
+      { value: "POST_DOCTORAL", label: "Post Doctoral" },
     ];
 
     return res.status(200).json({
       status: "success",
-      educationLevels
+      educationLevels,
     });
   } catch (err) {
     console.error("GET_EDUCATION_LEVELS_ERROR:", err);
@@ -421,54 +477,54 @@ exports.getEducationLevels = async (req, res) => {
 exports.getProgramsByLevel = async (req, res) => {
   try {
     const { currentLevel } = req.query;
-    
+
     let programs = [];
-    
+
     switch (currentLevel?.toUpperCase()) {
       case "HIGH_SCHOOL":
         programs = [
           { value: "BACHELORS", label: "Bachelor's Degree" },
           { value: "DIPLOMA", label: "Diploma/Certificate" },
-          { value: "FOUNDATION", label: "Foundation Year" }
+          { value: "FOUNDATION", label: "Foundation Year" },
         ];
         break;
-        
+
       case "BACHELORS":
         programs = [
           { value: "MASTERS", label: "Master's Degree" },
           { value: "PG_DIPLOMA", label: "Postgraduate Diploma" },
-          { value: "MBA", label: "MBA" }
+          { value: "MBA", label: "MBA" },
         ];
         break;
-        
+
       case "MASTERS":
         programs = [
           { value: "PHD", label: "PhD/Doctorate" },
           { value: "RESEARCH_MASTERS", label: "Research Master's" },
-          { value: "EXECUTIVE_EDUCATION", label: "Executive Education" }
+          { value: "EXECUTIVE_EDUCATION", label: "Executive Education" },
         ];
         break;
-        
+
       case "PHD":
         programs = [
           { value: "POST_DOCTORAL", label: "Post Doctoral" },
-          { value: "RESEARCH_FELLOWSHIP", label: "Research Fellowship" }
+          { value: "RESEARCH_FELLOWSHIP", label: "Research Fellowship" },
         ];
         break;
-        
+
       default:
         programs = [
           { value: "BACHELORS", label: "Bachelor's Degree" },
           { value: "MASTERS", label: "Master's Degree" },
           { value: "PHD", label: "PhD/Doctorate" },
           { value: "DIPLOMA", label: "Diploma/Certificate" },
-          { value: "EXCHANGE", label: "Exchange Program" }
+          { value: "EXCHANGE", label: "Exchange Program" },
         ];
     }
 
     return res.status(200).json({
       status: "success",
-      programs
+      programs,
     });
   } catch (err) {
     console.error("GET_PROGRAMS_ERROR:", err);

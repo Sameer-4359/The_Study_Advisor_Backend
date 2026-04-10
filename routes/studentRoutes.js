@@ -2,45 +2,43 @@
 const router = require("express").Router();
 const { uploadDocuments, replaceS3withCF } = require("../middleware/uploadDocuments");
 const documentController = require("../controllers/documentController");
+const studentSopController = require("../controllers/studentSopController");
 const auth = require("../middleware/authMiddleware");
+
+router.use(auth.verifyToken, auth.checkRole("student"));
 
 // Upload/Update document
 router.post(
   "/upload",
-  auth.verifyToken,
-  uploadDocuments.single("file"), 
+  uploadDocuments.single("file"),
   replaceS3withCF,
   documentController.uploadDocument
 );
 
 // Get all documents
-router.get(
-  "/documents",
-  auth.verifyToken,
-  documentController.getDocuments
-);
+router.get("/documents", documentController.getDocuments);
 
 // Get single document
-router.get(
-  "/documents/:id",
-  auth.verifyToken,
-  documentController.getDocumentById
-);
+router.get("/documents/:id", documentController.getDocumentById);
 
 // Update document with new file
 router.put(
   "/documents/:id",
-  auth.verifyToken,
-  uploadDocuments.single("file"), 
+  uploadDocuments.single("file"),
   replaceS3withCF,
   documentController.updateDocument
 );
 
 // Delete document
-router.delete(
-  "/documents/:id",
-  auth.verifyToken,
-  documentController.deleteDocument
-);
+router.delete("/documents/:id", documentController.deleteDocument);
+
+// SOP workflow for students
+router.get("/sop", studentSopController.getMySops);
+router.get("/sop/:id", studentSopController.getMySopById);
+router.post("/sop/draft", studentSopController.saveDraft);
+router.post("/sop/submit", studentSopController.submitSop);
+router.post("/sop/:id/link-latest-file", studentSopController.linkLatestSopDocument);
+router.get("/sop/:id/download", studentSopController.getSopDownloadInfo);
+router.put("/sop/:id/status", studentSopController.updateSopStatusSelf);
 
 module.exports = router;

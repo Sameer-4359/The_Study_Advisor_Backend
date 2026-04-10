@@ -1,5 +1,6 @@
 // controllers/documentController.js
 const prisma = require("../prisma/client");
+const { emitStudentActivity } = require("../services/activity.service");
 
 // Upload document controller
 exports.uploadDocument = async (req, res) => {
@@ -30,7 +31,7 @@ exports.uploadDocument = async (req, res) => {
     });
 
     let document;
-    
+
     if (existingDoc) {
       // Update existing document
       document = await prisma.document.update({
@@ -52,9 +53,24 @@ exports.uploadDocument = async (req, res) => {
       });
     }
 
+    await emitStudentActivity({
+      studentId: userId,
+      actorId: userId,
+      eventType: existingDoc ? "DOCUMENT_UPDATED" : "DOCUMENT_UPLOADED",
+      description: existingDoc
+        ? `Student replaced ${type} document`
+        : `Student uploaded ${type} document`,
+      metadata: {
+        documentId: document.id,
+        type: document.type,
+      },
+    });
+
     return res.status(201).json({
       status: "success",
-      message: existingDoc ? "Document updated successfully" : "Document uploaded successfully",
+      message: existingDoc
+        ? "Document updated successfully"
+        : "Document uploaded successfully",
       document,
     });
   } catch (err) {
@@ -73,7 +89,7 @@ exports.getDocuments = async (req, res) => {
 
     const documents = await prisma.document.findMany({
       where: { userId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     // Group documents by type for better frontend handling
@@ -171,6 +187,17 @@ exports.updateDocument = async (req, res) => {
       },
     });
 
+    await emitStudentActivity({
+      studentId: userId,
+      actorId: userId,
+      eventType: "DOCUMENT_UPDATED",
+      description: `Student updated ${updatedDocument.type} document`,
+      metadata: {
+        documentId: updatedDocument.id,
+        type: updatedDocument.type,
+      },
+    });
+
     return res.status(200).json({
       status: "success",
       message: "Document updated successfully",
@@ -208,6 +235,17 @@ exports.deleteDocument = async (req, res) => {
 
     await prisma.document.delete({
       where: { id: parseInt(id) },
+    });
+
+    await emitStudentActivity({
+      studentId: userId,
+      actorId: userId,
+      eventType: "DOCUMENT_DELETED",
+      description: `Student deleted ${existingDoc.type} document`,
+      metadata: {
+        documentId: existingDoc.id,
+        type: existingDoc.type,
+      },
     });
 
     return res.status(200).json({

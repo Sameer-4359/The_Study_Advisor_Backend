@@ -1,0 +1,48 @@
+{
+  "entries": [
+    {
+      "id": "admission-cs-canada",
+      "title": "Computer Science Admission Requirements in Canada",
+      "tags": [
+        "admission",
+        "requirements",
+        "computer",
+        "science",
+        "canada",
+        "gpa",
+        "ielts"
+      ],
+      "content": "For many Computer Science programs in Canada, students are expected to have a strong academic background. Typical expectations include GPA around 3.0 to 3.7 (or equivalent), IELTS overall 6.5 to 7.0, and no band lower than about 6.0 for competitive programs. Specific requirements vary by university and by undergraduate vs postgraduate level."
+    },
+    {
+      "id": "ielts-guidance",
+      "title": "IELTS Guidance for Top Universities",
+      "tags": ["ielts", "english", "language", "score"],
+      "content": "For highly ranked universities, a common benchmark is IELTS 6.5 to 7.0 overall. Some selective programs, especially at master's level, may require stronger writing or speaking bands. Always verify the exact department-level requirement before applying."
+    },
+    {
+      "id": "scholarships-overview",
+      "title": "Scholarship Opportunities",
+      "tags": ["scholarship", "funding", "financial", "aid"],
+      "content": "Scholarships can include merit-based entrance awards, need-based support, and program-specific grants. Students should check scholarship deadlines early, prepare strong personal statements, and submit complete academic records to improve their chances."
+    },
+    {
+      "id": "application-timeline",
+      "title": "Application Timeline",
+      "tags": ["timeline", "application", "deadline", "process"],
+      "content": "A practical timeline is to start preparing 8 to 10 months before intake. Document preparation and test scores can take 1 to 2 months, application review can take 6 to 12 weeks, and visa planning can require additional time."
+    },
+    {
+      "id": "job-prospects-cs",
+      "title": "Job Prospects After Graduation",
+      "tags": ["jobs", "career", "employment", "salary"],
+      "content": "Computer Science graduates generally find opportunities in software development, data analysis, cloud engineering, and cybersecurity roles. Outcomes depend on skills, internships, project portfolio, and local job market conditions."
+    },
+    {
+      "id": "value-for-money",
+      "title": "How to Evaluate Value for Money",
+      "tags": ["tuition", "cost", "value", "budget"],
+      "content": "When comparing universities, students should evaluate total tuition, living costs, scholarship availability, co-op or internship access, program outcomes, and post-study work opportunities rather than tuition alone."
+    }
+  ]
+}

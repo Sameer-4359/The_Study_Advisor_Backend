@@ -1,23 +1,23 @@
 // middleware/auth.js
-const jwt = require('jsonwebtoken');
+const jwt = require("jsonwebtoken");
 const JWT_SECRET = process.env.JWT_SECRET;
 
 const verifyToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
-  
+
   if (!authHeader) {
-    return res.status(401).json({ 
+    return res.status(401).json({
       status: "error",
-      message: 'No token provided' 
+      message: "No token provided",
     });
   }
 
-  const token = authHeader.split(' ')[1];
-  
+  const token = authHeader.split(" ")[1];
+
   if (!token) {
-    return res.status(401).json({ 
+    return res.status(401).json({
       status: "error",
-      message: 'Malformed token' 
+      message: "Malformed token",
     });
   }
 
@@ -26,15 +26,15 @@ const verifyToken = (req, res, next) => {
     req.user = decoded; // attach user info to request
     next();
   } catch (err) {
-    if (err.name === 'TokenExpiredError') {
-      return res.status(401).json({ 
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).json({
         status: "error",
-        message: 'Token expired' 
+        message: "Token expired",
       });
     }
-    return res.status(401).json({ 
+    return res.status(401).json({
       status: "error",
-      message: 'Invalid token' 
+      message: "Invalid token",
     });
   }
 };
@@ -48,14 +48,17 @@ const checkRole = (...roles) => {
         message: "User not authenticated",
       });
     }
-    
-    if (!roles.includes(req.user.role)) {
+
+    const normalizedRoles = roles.map((role) => String(role).toLowerCase());
+    const userRole = String(req.user.role || "").toLowerCase();
+
+    if (!normalizedRoles.includes(userRole)) {
       return res.status(403).json({
         status: "error",
         message: "Insufficient permissions",
       });
     }
-    
+
     next();
   };
 };

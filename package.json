@@ -6,7 +6,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
     "ingest:pdfs": "node scripts/ingest-pdfs.mjs",
-    "reset:vector-db": "node scripts/reset-db.mjs"
+    "reset:vector-db": "node scripts/reset-db.mjs",
+    "backfill:sop": "node scripts/backfill-sop-versions.mjs"
   },
   "keywords": [],
   "author": "",
