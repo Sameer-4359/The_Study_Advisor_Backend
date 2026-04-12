@@ -1,48 +1,64 @@
 {
   "entries": [
     {
-      "id": "admission-cs-canada",
-      "title": "Computer Science Admission Requirements in Canada",
-      "tags": [
-        "admission",
-        "requirements",
-        "computer",
-        "science",
-        "canada",
-        "gpa",
-        "ielts"
-      ],
-      "content": "For many Computer Science programs in Canada, students are expected to have a strong academic background. Typical expectations include GPA around 3.0 to 3.7 (or equivalent), IELTS overall 6.5 to 7.0, and no band lower than about 6.0 for competitive programs. Specific requirements vary by university and by undergraduate vs postgraduate level."
+      "id": "global-top-tier-rankings",
+      "title": "World's Top Universities (Ivy League & Elite)",
+      "tags": ["mit", "harvard", "stanford", "oxford", "cambridge", "top universities", "usa", "uk"],
+      "content": "For elite institutions, requirements are very high: MIT (#1, GPA 3.9, IELTS 7.3, Tuition ~$28k), Harvard (#2, GPA 3.9, IELTS 6.8, Tuition ~$25k), Stanford (#3, GPA 3.9, IELTS 7.2, Tuition ~$42k). In the UK, Oxford (#4) and Cambridge (#5) require GPA 3.8 and IELTS 7.4-7.5."
     },
     {
-      "id": "ielts-guidance",
-      "title": "IELTS Guidance for Top Universities",
-      "tags": ["ielts", "english", "language", "score"],
-      "content": "For highly ranked universities, a common benchmark is IELTS 6.5 to 7.0 overall. Some selective programs, especially at master's level, may require stronger writing or speaking bands. Always verify the exact department-level requirement before applying."
+      "id": "canada-detailed-database",
+      "title": "University Options and Requirements in Canada",
+      "tags": ["canada", "toronto", "stewartland", "waterloo", "ubc", "admission"],
+      "content": "Canada has options for all levels: University of Toronto (#18) is top-tier (GPA 3.6, IELTS 7.4, Tuition ~$49k). Mid-range schools include Admin Test University (GPA 3.2, IELTS 6.5, $32k) and Stewartland University (#253, GPA 3.1, IELTS 6.2, $11.5k). Low GPA options like Sanchezfort accept 2.6 GPA."
     },
     {
-      "id": "scholarships-overview",
-      "title": "Scholarship Opportunities",
-      "tags": ["scholarship", "funding", "financial", "aid"],
-      "content": "Scholarships can include merit-based entrance awards, need-based support, and program-specific grants. Students should check scholarship deadlines early, prepare strong personal statements, and submit complete academic records to improve their chances."
+      "id": "europe-university-database",
+      "title": "Study in Europe: Germany, France, Switzerland, and Sweden",
+      "tags": ["germany", "france", "switzerland", "sweden", "eth zurich", "low tuition"],
+      "content": "Europe offers affordable quality education. ETH Zurich (#11, GPA 3.7) is elite. France's Hurstfurt University is very cheap ($8,452, GPA 2.8). In Germany, Rodneymouth (#210) accepts 2.6 GPA and Kaylamouth (#378) accepts 3.0 GPA. Sweden's Lake Larry accepts 2.5 GPA."
     },
     {
-      "id": "application-timeline",
-      "title": "Application Timeline",
-      "tags": ["timeline", "application", "deadline", "process"],
-      "content": "A practical timeline is to start preparing 8 to 10 months before intake. Document preparation and test scores can take 1 to 2 months, application review can take 6 to 12 weeks, and visa planning can require additional time."
+      "id": "asia-pacific-australia-database",
+      "title": "University Options in Singapore and Australia",
+      "tags": ["singapore", "australia", "nus", "melbourne", "high tuition"],
+      "content": "NUS Singapore (#19) requires GPA 3.6 and IELTS 6.7. University of Melbourne (#33) in Australia is premium (Tuition ~$55k, GPA 3.5). For lower requirements in Australia, Lake Roberto (#509) accepts GPA 2.9 and IELTS 6.0."
     },
     {
-      "id": "job-prospects-cs",
-      "title": "Job Prospects After Graduation",
-      "tags": ["jobs", "career", "employment", "salary"],
-      "content": "Computer Science graduates generally find opportunities in software development, data analysis, cloud engineering, and cybersecurity roles. Outcomes depend on skills, internships, project portfolio, and local job market conditions."
+      "id": "gic-and-financial-requirements",
+      "title": "GIC, Tuition, and Financial Proof for Visa",
+      "tags": ["gic", "finances", "money", "sds", "banking", "canada visa"],
+      "content": "For Canada's SDS stream, a GIC of $20,635 CAD (2024/25 rate) is mandatory. Students must also show proof of paying the first year's tuition. Living costs average $1,500-$2,200 CAD per month depending on the city (Toronto/Vancouver being highest)."
     },
     {
-      "id": "value-for-money",
-      "title": "How to Evaluate Value for Money",
-      "tags": ["tuition", "cost", "value", "budget"],
-      "content": "When comparing universities, students should evaluate total tuition, living costs, scholarship availability, co-op or internship access, program outcomes, and post-study work opportunities rather than tuition alone."
+      "id": "document-checklist-and-sop",
+      "title": "Complete Document Checklist for Applications",
+      "tags": ["documents", "checklist", "sop", "lor", "passport", "hec", "ibcc"],
+      "content": "Essential documents: 1. Valid Passport 2. Attested Transcripts (HEC/IBCC) 3. Statement of Purpose (SOP) 4. Two Academic LORs 5. English Test Scores (IELTS/PTE/Duolingo) 6. CV 7. Proof of Finances (GIC/Bank Statement)."
+    },
+    {
+      "id": "work-rights-and-pgwp",
+      "title": "Part-time Jobs and Post-Graduation Work Permit (PGWP)",
+      "tags": ["jobs", "work", "part-time", "pgwp", "stay back", "pr"],
+      "content": "Students can work 20 hours/week during studies and 40 hours during breaks. Average pay is $15-$17/hr. After graduation, 2+ year programs qualify for a 3-year PGWP, which is a primary pathway to Permanent Residency (PR) in Canada."
+    },
+    {
+      "id": "application-strategy-and-timeline",
+      "title": "Timeline, Intakes, and Admission Strategy",
+      "tags": ["deadlines", "fall", "winter", "timeline", "strategy"],
+      "content": "Start 10 months early. Fall (Sept) is the main intake (deadlines Jan-March). Winter (Jan) deadlines are June-Aug. For low GPA (2.5-2.8), target Germany (Rodneymouth), France (Hurstfurt), or Canada (Sanchezfort). For IELTS 6.0, target South Patrickmouth (UK) or Lake Roberto (Australia)."
+    },
+    {
+      "id": "degree-comparison-masters-vs-diploma",
+      "title": "Master's Degree vs. Post-Graduate (PG) Diploma",
+      "tags": ["masters", "diploma", "comparison", "pr points", "education"],
+      "content": "Master's degrees provide higher PR points and are research-focused but expensive. PG Diplomas are 1-2 years, industry-focused, cheaper, and excellent for students wanting to enter the job market quickly with PGWP eligibility."
+    },
+    {
+      "id": "partner-universities-exclusive",
+      "title": "The Study Advisor Partnered Institutions",
+      "tags": ["partner", "exclusive", "fee waiver"],
+      "content": "Admin Test University in Toronto, Canada, is a partnered institution. Partnered status may include application fee waivers ($120) and prioritized processing for our students."
     }
   ]
 }

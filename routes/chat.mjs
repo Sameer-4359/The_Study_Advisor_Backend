@@ -127,7 +127,7 @@ router.post("/", async (req, res) => {
     });
 
     const systemRule =
-      "Answer ONLY from the Context below. If the Context does not contain enough information to answer, reply exactly: Mujhe iska jawab nahi pata. Do not guess. Do not use outside knowledge. Keep the answer concise and student-friendly.";
+      "Answer ONLY from the Context below. If the Context does not contain enough information to answer, reply exactly: Currently i do not have enough information to answer this question. Do not guess. Do not use outside knowledge. Keep the answer concise and student-friendly.";
 
     const prompt = `${systemRule}\n\nContext:\n${context || "(empty)"}\n\nUser question:\n${text}`;
 

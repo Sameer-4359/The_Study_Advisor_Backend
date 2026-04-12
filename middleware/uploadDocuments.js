@@ -3,7 +3,7 @@ const multerS3 = require("multer-s3");
 const s3 = require("../AWS/aws");
 
 
-const bucketName = 'tapbot-website-info';
+const bucketName = 'gp-shah';
 const cloudFrontUrl = "https://d1augqcjseb2ys.cloudfront.net";
 
 const uploadDocuments = multer({
