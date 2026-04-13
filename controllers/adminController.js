@@ -60,6 +60,30 @@ const mapCounselor = (user, assignedStudents = 0) => ({
   assignedStudents,
 });
 
+const toRoleLabel = (role) => {
+  const normalized = String(role || "")
+    .trim()
+    .toLowerCase();
+  if (!normalized) return "Unknown";
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
+
+const toActor = (entity, fallbackRole = "system") => ({
+  name: entity?.fullName || "System",
+  email: entity?.email || null,
+  role: toRoleLabel(entity?.role || fallbackRole),
+});
+
+const toSubject = (entity) => {
+  if (!entity) return null;
+
+  return {
+    name: entity.fullName,
+    email: entity.email || null,
+    role: toRoleLabel(entity.role),
+  };
+};
+
 exports.getDashboardSummary = async (_req, res) => {
   try {
     const [
@@ -69,9 +93,14 @@ exports.getDashboardSummary = async (_req, res) => {
       totalSops,
       assignedStudents,
       universitiesAgg,
+      pendingConnectionRequests,
     ] = await Promise.all([
-      prisma.user.count({ where: { role: "student" } }),
-      prisma.user.count({ where: { role: "counselor" } }),
+      prisma.user.count({
+        where: { role: { equals: "student", mode: "insensitive" } },
+      }),
+      prisma.user.count({
+        where: { role: { equals: "counselor", mode: "insensitive" } },
+      }),
       prisma.document.count(),
       prisma.statementOfPurpose.count(),
       prisma.counselorStudentAssignment.count({ where: { status: "ACTIVE" } }),
@@ -83,6 +112,20 @@ exports.getDashboardSummary = async (_req, res) => {
           FROM universities
         `,
       ),
+      prisma.counselorNotification
+        .findMany({
+          where: {
+            isRead: false,
+            title: { startsWith: "[CONNECT_REQUEST]" },
+            studentId: { not: null },
+            counselor: {
+              role: { equals: "admin", mode: "insensitive" },
+            },
+          },
+          select: { studentId: true },
+          distinct: ["studentId"],
+        })
+        .then((rows) => rows.length),
     ]);
 
     const totalUniversities = Number(universitiesAgg?.[0]?.total || 0);
@@ -110,6 +153,9 @@ exports.getDashboardSummary = async (_req, res) => {
       applications: {
         total: assignedStudents,
       },
+      connections: {
+        pendingRequests: pendingConnectionRequests,
+      },
     });
   } catch (error) {
     console.error("ADMIN_DASHBOARD_SUMMARY_ERROR:", error);
@@ -127,7 +173,7 @@ exports.getDashboardMonthlyTrends = async (_req, res) => {
         Prisma.sql`
           SELECT DATE_TRUNC('month', "createdAt") AS month_start, COUNT(*)::int AS total
           FROM "User"
-          WHERE role = 'student'
+          WHERE LOWER(role) = 'student'
           GROUP BY DATE_TRUNC('month', "createdAt")
           ORDER BY month_start ASC
         `,
@@ -198,21 +244,52 @@ exports.getDashboardRecentActivity = async (_req, res) => {
       recentPartneredUniversities,
     ] = await Promise.all([
       prisma.studentActivityEvent.findMany({
+        include: {
+          actor: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              role: true,
+            },
+          },
+          student: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              role: true,
+            },
+          },
+        },
         take: 8,
         orderBy: { createdAt: "desc" },
       }),
       prisma.counselorStudentAssignment.findMany({
         where: { status: "ACTIVE" },
         include: {
-          counselor: { select: { fullName: true } },
-          student: { select: { fullName: true } },
+          counselor: {
+            select: { id: true, fullName: true, email: true, role: true },
+          },
+          student: {
+            select: { id: true, fullName: true, email: true, role: true },
+          },
+          creator: {
+            select: { id: true, fullName: true, email: true, role: true },
+          },
         },
         orderBy: { assignedAt: "desc" },
         take: 6,
       }),
       prisma.user.findMany({
-        where: { role: "counselor" },
-        select: { id: true, fullName: true, createdAt: true },
+        where: { role: { equals: "counselor", mode: "insensitive" } },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          role: true,
+          createdAt: true,
+        },
         orderBy: { createdAt: "desc" },
         take: 5,
       }),
@@ -230,11 +307,15 @@ exports.getDashboardRecentActivity = async (_req, res) => {
     const feed = [];
 
     recentEvents.forEach((event) => {
+      const actor = event.actor || event.student;
       feed.push({
         id: `event-${event.id}`,
         type: "System",
         message: event.description,
         time: event.createdAt,
+        activityCode: event.eventType,
+        actor: toActor(actor, "student"),
+        subject: toSubject(event.student),
       });
     });
 
@@ -244,6 +325,12 @@ exports.getDashboardRecentActivity = async (_req, res) => {
         type: "Student",
         message: `${assignment.student.fullName} assigned to ${assignment.counselor.fullName}`,
         time: assignment.assignedAt,
+        activityCode: "STUDENT_ASSIGNED",
+        actor: assignment.creator
+          ? toActor(assignment.creator, "admin")
+          : { name: "Admin", email: null, role: "Admin" },
+        subject: toSubject(assignment.student),
+        target: toSubject(assignment.counselor),
       });
     });
 
@@ -253,6 +340,9 @@ exports.getDashboardRecentActivity = async (_req, res) => {
         type: "Counselor",
         message: `${counselor.fullName} joined as counselor`,
         time: counselor.createdAt,
+        activityCode: "COUNSELOR_JOINED",
+        actor: toActor(counselor, "counselor"),
+        subject: toSubject(counselor),
       });
     });
 
@@ -262,6 +352,17 @@ exports.getDashboardRecentActivity = async (_req, res) => {
         type: "University",
         message: `${university.name} marked as partnered university`,
         time: university.activity_at,
+        activityCode: "UNIVERSITY_PARTNERED",
+        actor: {
+          name: university.name,
+          email: null,
+          role: "University",
+        },
+        subject: {
+          name: university.name,
+          email: null,
+          role: "University",
+        },
       });
     });
 
@@ -277,10 +378,134 @@ exports.getDashboardRecentActivity = async (_req, res) => {
   }
 };
 
+exports.getAdminNotifications = async (req, res) => {
+  try {
+    const adminId = Number(req.user?.id);
+    if (Number.isNaN(adminId) || adminId < 1) {
+      return res.status(401).json({
+        status: "error",
+        message: "Unauthorized admin",
+      });
+    }
+
+    const { limit: limitInput = "25", unreadOnly = "false" } = req.query || {};
+
+    const limit = Math.min(Math.max(parseInt(limitInput, 10) || 25, 1), 100);
+    const onlyUnread = String(unreadOnly).toLowerCase() === "true";
+
+    const where = {
+      counselorId: adminId,
+      ...(onlyUnread ? { isRead: false } : {}),
+    };
+
+    const [items, unreadCount] = await Promise.all([
+      prisma.counselorNotification.findMany({
+        where,
+        include: {
+          student: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+      }),
+      prisma.counselorNotification.count({
+        where: { counselorId: adminId, isRead: false },
+      }),
+    ]);
+
+    const notifications = items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      message: item.message,
+      type: item.type,
+      isRead: item.isRead,
+      createdAt: item.createdAt,
+      readAt: item.readAt,
+      studentId: item.studentId,
+      student: item.student,
+      isConnectionRequest: item.title.startsWith("[CONNECT_REQUEST]"),
+      actionPath: item.studentId
+        ? `/admin/assign-students?studentId=${item.studentId}`
+        : null,
+    }));
+
+    return res.status(200).json({
+      status: "success",
+      unreadCount,
+      notifications,
+    });
+  } catch (error) {
+    console.error("ADMIN_GET_NOTIFICATIONS_ERROR:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to fetch admin notifications",
+    });
+  }
+};
+
+exports.markAdminNotificationRead = async (req, res) => {
+  try {
+    const adminId = Number(req.user?.id);
+    const notificationId = Number(req.params.id);
+
+    if (Number.isNaN(adminId) || adminId < 1) {
+      return res.status(401).json({
+        status: "error",
+        message: "Unauthorized admin",
+      });
+    }
+
+    if (Number.isNaN(notificationId) || notificationId < 1) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid notification id",
+      });
+    }
+
+    const existing = await prisma.counselorNotification.findFirst({
+      where: {
+        id: notificationId,
+        counselorId: adminId,
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        status: "error",
+        message: "Notification not found",
+      });
+    }
+
+    const updated = await prisma.counselorNotification.update({
+      where: { id: notificationId },
+      data: {
+        isRead: true,
+        readAt: new Date(),
+      },
+    });
+
+    return res.status(200).json({
+      status: "success",
+      notification: updated,
+    });
+  } catch (error) {
+    console.error("ADMIN_MARK_NOTIFICATION_READ_ERROR:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to update notification",
+    });
+  }
+};
+
 exports.getCounselors = async (_req, res) => {
   try {
     const counselors = await prisma.user.findMany({
-      where: { role: "counselor" },
+      where: { role: { equals: "counselor", mode: "insensitive" } },
       include: {
         counselorProfile: true,
       },
@@ -412,7 +637,10 @@ exports.updateCounselor = async (req, res) => {
       req.body || {};
 
     const existing = await prisma.user.findFirst({
-      where: { id: counselorId, role: "counselor" },
+      where: {
+        id: counselorId,
+        role: { equals: "counselor", mode: "insensitive" },
+      },
       include: { counselorProfile: true },
     });
 
@@ -504,7 +732,10 @@ exports.deleteCounselor = async (req, res) => {
     }
 
     const counselor = await prisma.user.findFirst({
-      where: { id: counselorId, role: "counselor" },
+      where: {
+        id: counselorId,
+        role: { equals: "counselor", mode: "insensitive" },
+      },
       include: { counselorProfile: true },
     });
 
@@ -538,43 +769,58 @@ exports.deleteCounselor = async (req, res) => {
 exports.getStudentsForAssignment = async (req, res) => {
   try {
     const q = String(req.query.q || "").trim();
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = clamp(parseInt(req.query.limit, 10) || 20, 1, 200);
 
-    const students = await prisma.user.findMany({
-      where: {
-        role: "student",
-        ...(q
-          ? {
-              OR: [
-                { fullName: { contains: q, mode: "insensitive" } },
-                { email: { contains: q, mode: "insensitive" } },
-                {
-                  userProfile: {
-                    is: {
-                      desiredProgram: { contains: q, mode: "insensitive" },
-                    },
+    const where = {
+      role: { equals: "student", mode: "insensitive" },
+      ...(q
+        ? {
+            OR: [
+              { fullName: { contains: q, mode: "insensitive" } },
+              { email: { contains: q, mode: "insensitive" } },
+              {
+                userProfile: {
+                  is: {
+                    desiredProgram: { contains: q, mode: "insensitive" },
                   },
                 },
-              ],
-            }
-          : {}),
-      },
-      include: {
-        userProfile: true,
-        studentAssignment: {
-          where: { status: "ACTIVE" },
-          include: {
-            counselor: {
-              select: {
-                id: true,
-                fullName: true,
-                email: true,
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, assignedCount, students] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.counselorStudentAssignment.count({
+        where: {
+          status: "ACTIVE",
+          student: where,
+        },
+      }),
+      prisma.user.findMany({
+        where,
+        include: {
+          userProfile: true,
+          studentAssignment: {
+            where: { status: "ACTIVE" },
+            include: {
+              counselor: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  email: true,
+                },
               },
             },
           },
         },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
 
     const payload = students.map((student) => {
       const assignment = student.studentAssignment[0] || null;
@@ -603,9 +849,15 @@ exports.getStudentsForAssignment = async (req, res) => {
     return res.json({
       students: payload,
       summary: {
-        total: payload.length,
-        assigned: payload.filter((s) => s.assignedCounselor).length,
-        unassigned: payload.filter((s) => !s.assignedCounselor).length,
+        total,
+        assigned: assignedCount,
+        unassigned: Math.max(0, total - assignedCount),
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
       },
     });
   } catch (error) {
@@ -613,6 +865,155 @@ exports.getStudentsForAssignment = async (req, res) => {
     return res.status(500).json({
       status: "error",
       message: "Failed to fetch students",
+    });
+  }
+};
+
+exports.getStudentDetailsForAssignment = async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+    if (Number.isNaN(studentId) || studentId < 1) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid student id",
+      });
+    }
+
+    const student = await prisma.user.findFirst({
+      where: {
+        id: studentId,
+        role: { equals: "student", mode: "insensitive" },
+      },
+      include: {
+        userProfile: true,
+        documents: {
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            type: true,
+            fileName: true,
+            fileUrl: true,
+            createdAt: true,
+          },
+        },
+        studentAssignment: {
+          where: { status: "ACTIVE" },
+          include: {
+            counselor: {
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+              },
+            },
+          },
+          take: 1,
+        },
+      },
+    });
+
+    const latestSop = await prisma.statementOfPurpose.findFirst({
+      where: { userId: studentId },
+      include: {
+        document: {
+          select: {
+            id: true,
+            fileName: true,
+            fileUrl: true,
+            createdAt: true,
+          },
+        },
+        reviewer: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: [{ version: "desc" }, { createdAt: "desc" }],
+    });
+
+    if (!student) {
+      return res.status(404).json({
+        status: "error",
+        message: "Student not found",
+      });
+    }
+
+    const assignment = student.studentAssignment[0] || null;
+
+    return res.status(200).json({
+      status: "success",
+      student: {
+        id: student.id,
+        name: student.fullName,
+        email: student.email,
+        role: student.role,
+        createdAt: student.createdAt,
+        profile: {
+          phoneNumber: student.userProfile?.phoneNumber || null,
+          nationality: student.userProfile?.nationality || null,
+          desiredProgram: student.userProfile?.desiredProgram || null,
+          preferredCountry: student.userProfile?.preferredCountry || null,
+          preferredIntake: student.userProfile?.preferredIntake || null,
+          currentEducationLevel:
+            student.userProfile?.currentEducationLevel || null,
+          institutionName: student.userProfile?.institutionName || null,
+          fieldOfStudy: student.userProfile?.fieldOfStudy || null,
+          cgpa: student.userProfile?.cgpa || null,
+          ieltsScore: student.userProfile?.ieltsScore || null,
+          updatedAt: student.userProfile?.updatedAt || null,
+        },
+        assignedCounselor: assignment
+          ? {
+              assignmentId: assignment.id,
+              assignedAt: assignment.assignedAt,
+              name: assignment.counselor.fullName,
+              email: assignment.counselor.email,
+            }
+          : null,
+        documents: student.documents.map((doc) => ({
+          id: doc.id,
+          type: doc.type,
+          fileName: doc.fileName,
+          fileUrl: doc.fileUrl,
+          uploadedAt: doc.createdAt,
+        })),
+        latestSop: latestSop
+          ? {
+              id: latestSop.id,
+              version: latestSop.version,
+              title: latestSop.title,
+              status: latestSop.status,
+              reviewNotes: latestSop.reviewNotes,
+              submittedAt: latestSop.submittedAt,
+              reviewedAt: latestSop.reviewedAt,
+              updatedAt: latestSop.updatedAt,
+              document: latestSop.document
+                ? {
+                    id: latestSop.document.id,
+                    fileName: latestSop.document.fileName,
+                    fileUrl: latestSop.document.fileUrl,
+                    createdAt: latestSop.document.createdAt,
+                  }
+                : null,
+              reviewer: latestSop.reviewer
+                ? {
+                    id: latestSop.reviewer.id,
+                    fullName: latestSop.reviewer.fullName,
+                    email: latestSop.reviewer.email,
+                  }
+                : null,
+            }
+          : null,
+      },
+    });
+  } catch (error) {
+    console.error("ADMIN_GET_STUDENT_DETAILS_ERROR:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to fetch student details",
     });
   }
 };
@@ -638,10 +1039,16 @@ exports.createAssignment = async (req, res) => {
 
     const [student, counselor, counselorProfile] = await Promise.all([
       prisma.user.findFirst({
-        where: { id: parsedStudentId, role: "student" },
+        where: {
+          id: parsedStudentId,
+          role: { equals: "student", mode: "insensitive" },
+        },
       }),
       prisma.user.findFirst({
-        where: { id: parsedCounselorId, role: "counselor" },
+        where: {
+          id: parsedCounselorId,
+          role: { equals: "counselor", mode: "insensitive" },
+        },
       }),
       prisma.counselorProfile.findUnique({
         where: { userId: parsedCounselorId },
@@ -711,6 +1118,21 @@ exports.createAssignment = async (req, res) => {
           },
         });
 
+    await prisma.counselorNotification.updateMany({
+      where: {
+        counselorId: req.user?.id || null,
+        studentId: parsedStudentId,
+        title: {
+          startsWith: "[CONNECT_REQUEST]",
+        },
+        isRead: false,
+      },
+      data: {
+        isRead: true,
+        readAt: new Date(),
+      },
+    });
+
     return res.status(existing ? 200 : 201).json({
       assignment,
       student: {
@@ -763,7 +1185,10 @@ exports.updateAssignment = async (req, res) => {
       }
 
       const counselor = await prisma.user.findFirst({
-        where: { id: parsedCounselorId, role: "counselor" },
+        where: {
+          id: parsedCounselorId,
+          role: { equals: "counselor", mode: "insensitive" },
+        },
       });
 
       if (!counselor) {

@@ -7,7 +7,7 @@ async function resolveCounselorId(req) {
   }
 
   const firstCounselor = await prisma.user.findFirst({
-    where: { role: "counselor" },
+    where: { role: { equals: "counselor", mode: "insensitive" } },
     select: { id: true },
     orderBy: { id: "asc" },
   });

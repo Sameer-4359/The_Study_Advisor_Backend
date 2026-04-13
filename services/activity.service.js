@@ -35,7 +35,7 @@ async function emitStudentActivity({
     }
 
     const counselors = await prisma.user.findMany({
-      where: { role: "counselor" },
+      where: { role: { equals: "counselor", mode: "insensitive" } },
       select: { id: true },
     });
 

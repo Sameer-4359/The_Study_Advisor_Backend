@@ -9,6 +9,22 @@ router.use(verifyToken, checkRole("counselor"));
 router.get("/students", counselorController.getCounselorStudents);
 router.get("/students/:id", counselorController.getCounselorStudentById);
 router.get(
+  "/students/:id/sop/latest",
+  counselorController.getCounselorStudentLatestSop,
+);
+router.get(
+  "/students/:id/universities",
+  counselorController.getCounselorStudentUniversities,
+);
+router.put(
+  "/students/:id/universities/:universityId/status",
+  counselorController.updateCounselorStudentUniversityStatus,
+);
+router.put(
+  "/students/:id/documents/:documentId/review",
+  counselorController.updateCounselorStudentDocumentReview,
+);
+router.get(
   "/students/:id/activities",
   counselorController.getCounselorStudentActivities,
 );

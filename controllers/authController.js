@@ -4,11 +4,21 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
 const JWT_SECRET = process.env.JWT_SECRET;
+const ALLOWED_ROLES = new Set(["student", "counselor", "admin"]);
+
+const normalizeRole = (value) =>
+  String(value || "student")
+    .trim()
+    .toLowerCase();
 
 // -------- Signup -----------
 exports.register = async (req, res) => {
   try {
     const { fullName, email, password, role = "student" } = req.body;
+    const normalizedEmail = String(email || "")
+      .trim()
+      .toLowerCase();
+    const normalizedRole = normalizeRole(role);
 
     if (!fullName || !email || !password) {
       return res.status(400).json({
@@ -17,7 +27,16 @@ exports.register = async (req, res) => {
       });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (!ALLOWED_ROLES.has(normalizedRole)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid role.",
+      });
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
 
     if (existingUser) {
       return res.status(400).json({
@@ -30,26 +49,26 @@ exports.register = async (req, res) => {
 
     // Create user with empty profile
     const user = await prisma.user.create({
-      data: { 
-        fullName, 
-        email, 
+      data: {
+        fullName: String(fullName).trim(),
+        email: normalizedEmail,
         password: hashedPassword,
-        role 
+        role: normalizedRole,
       },
     });
 
     // Create empty user profile
-   await prisma.userProfile.create({
-  data: {
-    userId: user.id, // This links the profile to the user
-    // Other fields are null by default
-  }
-});
+    await prisma.userProfile.create({
+      data: {
+        userId: user.id, // This links the profile to the user
+        // Other fields are null by default
+      },
+    });
 
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       JWT_SECRET,
-      { expiresIn: "7d" } // Increased to 7 days for better UX
+      { expiresIn: "7d" }, // Increased to 7 days for better UX
     );
 
     return res.status(201).json({
@@ -76,6 +95,9 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = String(email || "")
+      .trim()
+      .toLowerCase();
 
     if (!email || !password) {
       return res.status(400).json({
@@ -84,11 +106,11 @@ exports.login = async (req, res) => {
       });
     }
 
-    const user = await prisma.user.findUnique({ 
-      where: { email },
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
       include: {
-        userProfile: true
-      }
+        userProfile: true,
+      },
     });
 
     if (!user) {
@@ -110,7 +132,7 @@ exports.login = async (req, res) => {
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     return res.json({
@@ -123,8 +145,9 @@ exports.login = async (req, res) => {
         email: user.email,
         role: user.role,
         hasProfile: !!user.userProfile,
-        profileCompletion: user.userProfile ? 
-          calculateProfileCompletion(user.userProfile) : 0
+        profileCompletion: user.userProfile
+          ? calculateProfileCompletion(user.userProfile)
+          : 0,
       },
     });
   } catch (err) {
@@ -139,13 +162,24 @@ exports.login = async (req, res) => {
 // Helper function to calculate profile completion
 function calculateProfileCompletion(profile) {
   const fields = [
-    'firstName', 'lastName', 'phoneNumber', 'dateOfBirth', 'nationality',
-    'currentEducationLevel', 'institutionName', 'fieldOfStudy',
-    'desiredProgram', 'preferredCountry', 'preferredIntake'
+    "firstName",
+    "lastName",
+    "phoneNumber",
+    "dateOfBirth",
+    "nationality",
+    "currentEducationLevel",
+    "institutionName",
+    "fieldOfStudy",
+    "desiredProgram",
+    "preferredCountry",
+    "preferredIntake",
   ];
 
-  const completedFields = fields.filter(field => 
-    profile[field] !== null && profile[field] !== undefined && profile[field] !== ''
+  const completedFields = fields.filter(
+    (field) =>
+      profile[field] !== null &&
+      profile[field] !== undefined &&
+      profile[field] !== "",
   );
 
   return Math.round((completedFields.length / fields.length) * 100);

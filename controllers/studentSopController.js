@@ -371,3 +371,108 @@ exports.updateSopStatusSelf = async (req, res) => {
       .json({ status: "error", message: "Failed to update SOP" });
   }
 };
+
+exports.savePdfVersion = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { title, content, submit } = req.body || {};
+
+    if (!req.file) {
+      return res.status(400).json({
+        status: "error",
+        message: "SOP PDF file is required",
+      });
+    }
+
+    const trimmedContent = String(content || "").trim();
+    if (!trimmedContent) {
+      return res.status(400).json({
+        status: "error",
+        message: "SOP content is required",
+      });
+    }
+
+    const fileName = String(req.file.originalname || "").toLowerCase();
+    const mimeType = String(req.file.mimetype || "").toLowerCase();
+    if (!fileName.endsWith(".pdf") && mimeType !== "application/pdf") {
+      return res.status(400).json({
+        status: "error",
+        message: "Only PDF SOP files are allowed",
+      });
+    }
+
+    const shouldSubmit = String(submit || "false").toLowerCase() === "true";
+
+    const maxVersion = await prisma.statementOfPurpose.aggregate({
+      where: { userId },
+      _max: { version: true },
+    });
+
+    const nextVersion = (maxVersion._max.version || 0) + 1;
+    const sopTitle = String(title || "Statement of Purpose").trim();
+
+    const result = await prisma.$transaction(async (tx) => {
+      const document = await tx.document.create({
+        data: {
+          userId,
+          type: "STATEMENT_OF_PURPOSE",
+          fileUrl: req.file.location,
+          fileName: req.file.originalname || `sop-v${nextVersion}.pdf`,
+        },
+      });
+
+      const sop = await tx.statementOfPurpose.create({
+        data: {
+          userId,
+          documentId: document.id,
+          version: nextVersion,
+          title: sopTitle || "Statement of Purpose",
+          content: trimmedContent,
+          status: shouldSubmit ? "SUBMITTED" : "DRAFT",
+          submittedAt: shouldSubmit ? new Date() : null,
+        },
+        include: {
+          document: {
+            select: {
+              id: true,
+              fileName: true,
+              fileUrl: true,
+              createdAt: true,
+            },
+          },
+        },
+      });
+
+      return { sop, document };
+    });
+
+    await emitStudentActivity({
+      studentId: userId,
+      actorId: userId,
+      eventType: shouldSubmit ? "SOP_SUBMITTED" : "SOP_DRAFT_SAVED",
+      description: shouldSubmit
+        ? `Student submitted SOP version ${result.sop.version}`
+        : `Student saved SOP version ${result.sop.version}`,
+      metadata: {
+        sopId: result.sop.id,
+        version: result.sop.version,
+        documentId: result.document.id,
+        source: "AI_SOP_WRITER_PDF",
+      },
+    });
+
+    return res.status(201).json({
+      status: "success",
+      message: shouldSubmit
+        ? "SOP PDF saved and submitted"
+        : "SOP PDF version saved",
+      sop: result.sop,
+    });
+  } catch (err) {
+    console.error("SAVE_SOP_PDF_VERSION_ERROR:", err);
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to save SOP PDF version",
+    });
+  }
+};

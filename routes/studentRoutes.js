@@ -1,8 +1,12 @@
 // routes/studentRoutes.js
 const router = require("express").Router();
-const { uploadDocuments, replaceS3withCF } = require("../middleware/uploadDocuments");
+const {
+  uploadDocuments,
+  replaceS3withCF,
+} = require("../middleware/uploadDocuments");
 const documentController = require("../controllers/documentController");
 const studentSopController = require("../controllers/studentSopController");
+const studentConnectionController = require("../controllers/studentConnectionController");
 const auth = require("../middleware/authMiddleware");
 
 router.use(auth.verifyToken, auth.checkRole("student"));
@@ -12,7 +16,7 @@ router.post(
   "/upload",
   uploadDocuments.single("file"),
   replaceS3withCF,
-  documentController.uploadDocument
+  documentController.uploadDocument,
 );
 
 // Get all documents
@@ -26,7 +30,7 @@ router.put(
   "/documents/:id",
   uploadDocuments.single("file"),
   replaceS3withCF,
-  documentController.updateDocument
+  documentController.updateDocument,
 );
 
 // Delete document
@@ -36,9 +40,29 @@ router.delete("/documents/:id", documentController.deleteDocument);
 router.get("/sop", studentSopController.getMySops);
 router.get("/sop/:id", studentSopController.getMySopById);
 router.post("/sop/draft", studentSopController.saveDraft);
+router.post(
+  "/sop/save-pdf-version",
+  uploadDocuments.single("file"),
+  replaceS3withCF,
+  studentSopController.savePdfVersion,
+);
 router.post("/sop/submit", studentSopController.submitSop);
-router.post("/sop/:id/link-latest-file", studentSopController.linkLatestSopDocument);
+router.post(
+  "/sop/:id/link-latest-file",
+  studentSopController.linkLatestSopDocument,
+);
 router.get("/sop/:id/download", studentSopController.getSopDownloadInfo);
 router.put("/sop/:id/status", studentSopController.updateSopStatusSelf);
+
+// Student connection workflow
+router.get("/connection", studentConnectionController.getConnectionInfo);
+router.post(
+  "/connection/request",
+  studentConnectionController.requestConnection,
+);
+router.post(
+  "/connection/meeting-request",
+  studentConnectionController.requestMeetingWithCounselor,
+);
 
 module.exports = router;
