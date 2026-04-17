@@ -21,8 +21,28 @@ function normalizeReviewStatus(input) {
   return allowed.includes(status) ? status : null;
 }
 
+function buildAssignedStudentSopWhere(counselorId) {
+  return {
+    user: {
+      studentAssignment: {
+        some: {
+          counselorId,
+          status: "ACTIVE",
+        },
+      },
+    },
+  };
+}
+
 exports.getSopReviews = async (req, res) => {
   try {
+    const counselorId = await resolveCounselorId(req);
+    if (!counselorId) {
+      return res
+        .status(404)
+        .json({ status: "error", message: "Counselor not found" });
+    }
+
     const {
       status = "all",
       page: pageInput = "1",
@@ -32,6 +52,7 @@ exports.getSopReviews = async (req, res) => {
     const limit = Math.min(Math.max(parseInt(limitInput, 10) || 25, 1), 100);
 
     const where = {
+      ...buildAssignedStudentSopWhere(counselorId),
       ...(status && status !== "all"
         ? { status: String(status).toUpperCase() }
         : {}),
@@ -73,14 +94,25 @@ exports.getSopReviews = async (req, res) => {
 exports.getSopReviewById = async (req, res) => {
   try {
     const sopId = Number(req.params.id);
+    const counselorId = await resolveCounselorId(req);
+
+    if (!counselorId) {
+      return res
+        .status(404)
+        .json({ status: "error", message: "Counselor not found" });
+    }
+
     if (Number.isNaN(sopId)) {
       return res
         .status(400)
         .json({ status: "error", message: "Invalid SOP id" });
     }
 
-    const review = await prisma.statementOfPurpose.findUnique({
-      where: { id: sopId },
+    const review = await prisma.statementOfPurpose.findFirst({
+      where: {
+        id: sopId,
+        ...buildAssignedStudentSopWhere(counselorId),
+      },
       include: {
         user: { select: { id: true, fullName: true, email: true } },
         reviewer: { select: { id: true, fullName: true, email: true } },
@@ -117,6 +149,12 @@ exports.updateSopReview = async (req, res) => {
     const counselorId = await resolveCounselorId(req);
     const { status, reviewNotes } = req.body;
 
+    if (!counselorId) {
+      return res
+        .status(404)
+        .json({ status: "error", message: "Counselor not found" });
+    }
+
     if (Number.isNaN(sopId)) {
       return res
         .status(400)
@@ -131,8 +169,11 @@ exports.updateSopReview = async (req, res) => {
       });
     }
 
-    const existing = await prisma.statementOfPurpose.findUnique({
-      where: { id: sopId },
+    const existing = await prisma.statementOfPurpose.findFirst({
+      where: {
+        id: sopId,
+        ...buildAssignedStudentSopWhere(counselorId),
+      },
     });
     if (!existing) {
       return res
@@ -207,8 +248,11 @@ exports.addSopComment = async (req, res) => {
         .json({ status: "error", message: "Comment body is required" });
     }
 
-    const sop = await prisma.statementOfPurpose.findUnique({
-      where: { id: sopId },
+    const sop = await prisma.statementOfPurpose.findFirst({
+      where: {
+        id: sopId,
+        ...buildAssignedStudentSopWhere(authorId),
+      },
     });
     if (!sop) {
       return res
