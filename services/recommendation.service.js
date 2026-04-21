@@ -37,6 +37,28 @@ function toNumber(value, fallback = null) {
   return Number.isNaN(parsed) ? fallback : parsed;
 }
 
+function normalizeCountry(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function parsePreferredCountries(studentProfile) {
+  const legacyPreferredCountry = studentProfile.preferredCountry;
+  const preferredCountryField = studentProfile.preferred_country;
+
+  return [
+    ...(Array.isArray(studentProfile.preferred_countries)
+      ? studentProfile.preferred_countries
+      : []),
+    typeof legacyPreferredCountry === "string" ? legacyPreferredCountry : "",
+    typeof preferredCountryField === "string" ? preferredCountryField : "",
+  ]
+    .flatMap((country) => String(country || "").split(","))
+    .map((country) => normalizeCountry(country))
+    .filter(Boolean);
+}
+
 function cosineSimilarity(vecA, vecB) {
   if (!vecA.length || vecA.length !== vecB.length) {
     return 0.5;
@@ -151,11 +173,7 @@ function normalizeStudentProfile(studentProfile) {
       ? String(studentProfile.institution_name)
       : null,
     desired_program: String(studentProfile.desired_program || ""),
-    preferred_countries: Array.isArray(studentProfile.preferred_countries)
-      ? studentProfile.preferred_countries
-          .map((country) => String(country))
-          .filter(Boolean)
-      : [],
+    preferred_countries: parsePreferredCountries(studentProfile),
     budget_usd: toNumber(studentProfile.budget_usd),
     preferred_intake: studentProfile.preferred_intake
       ? String(studentProfile.preferred_intake)
@@ -245,69 +263,40 @@ function serializeUniversity(university) {
   };
 }
 
-function buildWhereForEligible(profile, flexible) {
+function buildWhereForEligible(profile) {
   const clauses = [];
 
   clauses.push(Prisma.sql`program_level = ${profile.desired_program}`);
 
-  if (profile.field_of_study) {
-    const related = flexible
-      ? getRelatedFields(profile.field_of_study)
-      : [profile.field_of_study];
+  if (profile.preferred_countries.length) {
+    const countryClauses = profile.preferred_countries.map(
+      (country) => Prisma.sql`LOWER(country) = ${country}`,
+    );
 
-    if (related.length) {
-      const fieldClauses = related.map(
-        (field) => Prisma.sql`${field} = ANY(fields_offered)`,
-      );
-      clauses.push(Prisma.sql`(${Prisma.join(fieldClauses, " OR ")})`);
-    }
+    clauses.push(Prisma.sql`(${Prisma.join(countryClauses, " OR ")})`);
   }
 
-  if (flexible && profile.gpa < 3.0) {
-    clauses.push(Prisma.sql`min_gpa <= ${profile.gpa + 0.3}`);
-  } else {
-    clauses.push(Prisma.sql`min_gpa <= ${profile.gpa}`);
+  if (profile.budget_usd !== null) {
+    clauses.push(Prisma.sql`tuition_fee_usd <= ${profile.budget_usd}`);
   }
+
+  clauses.push(Prisma.sql`min_gpa <= ${profile.gpa}`);
 
   if (profile.ielts_score !== null) {
-    if (flexible && profile.ielts_score < 6.5) {
-      clauses.push(Prisma.sql`min_ielts <= ${profile.ielts_score + 0.5}`);
-    } else {
-      clauses.push(Prisma.sql`min_ielts <= ${profile.ielts_score}`);
-    }
+    clauses.push(
+      Prisma.sql`(min_ielts IS NULL OR min_ielts <= ${profile.ielts_score})`,
+    );
   }
 
   clauses.push(
     Prisma.sql`COALESCE(min_experience_years, 0) <= ${profile.experience_years}`,
   );
 
-  if (profile.budget_usd !== null) {
-    if (flexible) {
-      clauses.push(Prisma.sql`tuition_fee_usd <= ${profile.budget_usd * 1.2}`);
-    } else {
-      clauses.push(Prisma.sql`tuition_fee_usd <= ${profile.budget_usd}`);
-    }
-  }
-
-  if (profile.preferred_countries.length) {
-    const countryClauses = profile.preferred_countries.map(
-      (country) => Prisma.sql`country = ${country}`,
-    );
-
-    if (flexible && profile.preferred_countries.length < 3) {
-      clauses.push(
-        Prisma.sql`((${Prisma.join(countryClauses, " OR ")}) OR world_ranking <= 100)`,
-      );
-    } else {
-      clauses.push(Prisma.sql`(${Prisma.join(countryClauses, " OR ")})`);
-    }
-  }
-
   return clauses;
 }
 
-async function getEligibleUniversities(profile, flexible = true) {
-  const whereClauses = buildWhereForEligible(profile, flexible);
+async function getEligibleUniversities(profile) {
+  const whereClauses = buildWhereForEligible(profile);
   const query = whereClauses.length
     ? Prisma.sql`SELECT * FROM universities WHERE ${Prisma.join(whereClauses, " AND ")}`
     : Prisma.sql`SELECT * FROM universities`;
@@ -317,131 +306,113 @@ async function getEligibleUniversities(profile, flexible = true) {
   return rows.map(serializeUniversity);
 }
 
-async function getPotentialUniversities(profile) {
-  const rows = await prisma.$queryRaw(
-    Prisma.sql`
-      SELECT *
-      FROM universities
-      WHERE program_level = ${profile.desired_program}
-      ORDER BY world_ranking ASC NULLS LAST, min_gpa ASC
-      LIMIT 20
-    `,
-  );
+const MAX_RECOMMENDATION_SCORE = 125;
 
-  return rows.map(serializeUniversity);
+function matchesPreferredCountry(university, preferredCountries) {
+  if (!preferredCountries.length) {
+    return false;
+  }
+
+  return preferredCountries.includes(normalizeCountry(university.country));
 }
 
-function calculateEligibilityScore(university, profile) {
-  let score = 0;
-  let totalWeight = 0;
+function matchesFieldOfStudy(university, fieldOfStudy) {
+  const normalizedField = normalizeCountry(fieldOfStudy);
 
-  if (university.min_gpa <= profile.gpa) {
-    score += Math.min(1.0, profile.gpa / 4.0) * 0.3;
-    totalWeight += 0.3;
-  } else {
-    const gpaRatio = profile.gpa / Math.max(university.min_gpa, 0.1);
-    if (gpaRatio >= 0.8) {
-      score += gpaRatio * 0.15;
-      totalWeight += 0.15;
-    }
+  if (!normalizedField) {
+    return false;
   }
 
-  if (profile.ielts_score !== null && university.min_ielts !== null) {
-    if (profile.ielts_score >= university.min_ielts) {
-      score += Math.min(1.0, profile.ielts_score / 9.0) * 0.15;
-      totalWeight += 0.15;
-    } else {
-      const ieltsRatio =
-        profile.ielts_score / Math.max(university.min_ielts, 0.1);
-      if (ieltsRatio >= 0.9) {
-        score += ieltsRatio * 0.1;
-        totalWeight += 0.1;
-      }
-    }
+  const universityFields = [
+    university.program_name,
+    ...university.fields_offered,
+  ]
+    .map((field) => normalizeCountry(field))
+    .filter(Boolean);
+
+  if (universityFields.some((field) => field === normalizedField)) {
+    return true;
   }
 
-  const expRatio = Math.min(
-    1.0,
-    profile.experience_years /
-      Math.max(university.min_experience_years || 0, 1),
+  const relatedFields = getRelatedFields(fieldOfStudy).map(normalizeCountry);
+
+  return universityFields.some((field) =>
+    relatedFields.some(
+      (relatedField) =>
+        field.includes(relatedField) || relatedField.includes(field),
+    ),
   );
-  score += expRatio * 0.1;
-  totalWeight += 0.1;
+}
 
-  let fieldMatch = 0;
-  if (university.fields_offered.includes(profile.field_of_study)) {
-    fieldMatch = 1;
-  } else {
-    const related = getRelatedFields(profile.field_of_study).map((value) =>
-      value.toLowerCase(),
-    );
-    for (const field of university.fields_offered) {
-      if (
-        related.some((relatedField) =>
-          field.toLowerCase().includes(relatedField.toLowerCase()),
-        )
-      ) {
-        fieldMatch = 0.7;
-        break;
+function calculateRecommendationScore(university, profile) {
+  const preferredCountries = profile.preferred_countries;
+  const recommendationReasons = [];
+  let recommendationScore = 0;
+
+  // GPA contributes the largest academic weight.
+  if (profile.gpa >= university.min_gpa) {
+    recommendationScore += 30;
+    recommendationReasons.push("High GPA match");
+
+    if (profile.gpa - university.min_gpa > 0.5) {
+      recommendationScore += 10;
+      recommendationReasons.push("CGPA exceeds requirement");
+    }
+  }
+
+  // IELTS rewards both eligibility and performance above the minimum.
+  if (university.min_ielts !== null && profile.ielts_score !== null) {
+    if (profile.ielts_score >= university.min_ielts) {
+      recommendationScore += 20;
+      recommendationReasons.push("IELTS requirement met");
+
+      if (profile.ielts_score - university.min_ielts > 0.5) {
+        recommendationScore += 5;
+        recommendationReasons.push("IELTS exceeds requirement");
       }
     }
   }
-  score += fieldMatch * 0.2;
-  totalWeight += 0.2;
 
-  let countryScore = 0;
-  if (profile.preferred_countries.length) {
-    if (profile.preferred_countries.includes(university.country)) {
-      countryScore = 1;
-    } else if (university.world_ranking && university.world_ranking <= 100) {
-      countryScore = 0.5;
+  // Budget favors affordable matches and stronger value for money.
+  if (
+    profile.budget_usd !== null &&
+    university.tuition_fee_usd <= profile.budget_usd
+  ) {
+    recommendationScore += 25;
+    recommendationReasons.push("Within budget");
+
+    if (
+      profile.budget_usd - university.tuition_fee_usd >=
+      profile.budget_usd * 0.2
+    ) {
+      recommendationScore += 10;
+      recommendationReasons.push("Significantly cheaper than budget");
     }
   }
-  score += countryScore * 0.1;
-  totalWeight += 0.1;
 
-  let budgetScore = 0;
-  if (profile.budget_usd !== null) {
-    if (university.tuition_fee_usd <= profile.budget_usd) {
-      budgetScore = 1;
-    } else if (university.tuition_fee_usd <= profile.budget_usd * 1.2) {
-      budgetScore = 0.5;
-    }
-  }
-  score += budgetScore * 0.05;
-  totalWeight += 0.05;
-
-  let additionalScore = 0;
-  if (
-    profile.research_experience &&
-    ["MASTERS", "PHD", "RESEARCH_MASTERS"].includes(university.program_level)
-  ) {
-    additionalScore += 0.05;
+  if (matchesPreferredCountry(university, preferredCountries)) {
+    recommendationScore += 15;
+    recommendationReasons.push("Preferred country");
   }
 
-  if (profile.publications_count > 0) {
-    additionalScore += Math.min(0.03, profile.publications_count * 0.01);
+  if (matchesFieldOfStudy(university, profile.field_of_study)) {
+    recommendationScore += 10;
+    recommendationReasons.push("Field of study match");
   }
 
-  if (
-    profile.work_experience_relevant &&
-    ["MBA", "EXECUTIVE_EDUCATION", "MASTERS"].includes(university.program_level)
-  ) {
-    additionalScore += 0.02;
+  if (!recommendationReasons.length) {
+    recommendationReasons.push("Meets hard constraints");
   }
 
-  if (profile.leadership_experience) {
-    additionalScore += 0.02;
-  }
-
-  score += additionalScore * 0.1;
-  totalWeight += 0.1;
-
-  if (!totalWeight) {
-    return 0;
-  }
-
-  return Math.min(1.0, score / totalWeight);
+  return {
+    recommendationScore,
+    recommendationScoreNormalized: clamp(
+      recommendationScore / MAX_RECOMMENDATION_SCORE,
+      0,
+      1,
+    ),
+    matchReasons: recommendationReasons.slice(0, 3),
+  };
 }
 
 async function calculateSimilarityScore(university, profile) {
@@ -504,219 +475,92 @@ async function calculateSimilarityScore(university, profile) {
   return Math.max(0.3, Math.min(0.95, avg));
 }
 
-function calculateFinalScore(eligibilityScore, similarityScore, university) {
-  let eligibilityWeight = 0.7;
-  let similarityWeight = 0.3;
-
-  if (university.world_ranking) {
-    if (university.world_ranking <= 50) {
-      eligibilityWeight = 0.6;
-      similarityWeight = 0.4;
-    } else if (university.world_ranking >= 500) {
-      eligibilityWeight = 0.8;
-      similarityWeight = 0.2;
-    }
-  }
-
-  return Math.min(
-    1.0,
-    eligibilityScore * eligibilityWeight + similarityScore * similarityWeight,
-  );
-}
-
-function generateReasons(
-  university,
-  eligibilityScore,
-  similarityScore,
-  profile,
-) {
-  const reasons = [];
-
-  if (profile.gpa >= university.min_gpa + 0.3) {
-    reasons.push(`Strong GPA (${profile.gpa})`);
-  } else if (profile.gpa >= university.min_gpa) {
-    reasons.push("Meets GPA requirement");
-  }
-
-  if (profile.ielts_score !== null && university.min_ielts !== null) {
-    if (profile.ielts_score >= university.min_ielts + 0.5) {
-      reasons.push("Good English proficiency");
-    } else if (profile.ielts_score >= university.min_ielts) {
-      reasons.push("Meets language requirements");
-    }
-  }
-
-  if (university.fields_offered.includes(profile.field_of_study)) {
-    reasons.push(`Exact match for ${profile.field_of_study}`);
-  } else {
-    const related = getRelatedFields(profile.field_of_study);
-    const hasRelated = university.fields_offered.some((field) =>
-      related.some((item) => field.toLowerCase().includes(item.toLowerCase())),
-    );
-    if (hasRelated) {
-      reasons.push("Related program available");
-    }
-  }
-
-  if (
-    profile.preferred_countries.length &&
-    profile.preferred_countries.includes(university.country)
-  ) {
-    reasons.push("Located in preferred country");
-  }
-
-  if (university.world_ranking) {
-    if (university.world_ranking <= 50) {
-      reasons.push(`Top ${university.world_ranking} university globally`);
-    } else if (university.world_ranking <= 200) {
-      reasons.push("Ranked in top 200 worldwide");
-    }
-  }
-
-  if (profile.budget_usd !== null) {
-    if (university.tuition_fee_usd <= profile.budget_usd) {
-      reasons.push("Within your budget");
-    } else if (university.tuition_fee_usd <= profile.budget_usd * 1.2) {
-      reasons.push("Slightly above budget but competitive");
-    }
-  }
-
-  if (similarityScore > 0.75) {
-    reasons.push("Matches profile of previously accepted students");
-  } else if (similarityScore > 0.6) {
-    reasons.push("Similar to successful applicants");
-  }
-
-  if (reasons.length < 2) {
-    if (eligibilityScore > 0.7) {
-      reasons.push("Strong overall match");
-    } else {
-      reasons.push("Good potential match");
-    }
-  }
-
-  return reasons.slice(0, 3);
-}
-
-function getMatchedCriteriaCount(profile, recommendations) {
-  const matched = {
-    field_of_study: 0,
-    preferred_countries: 0,
-    budget: 0,
-    gpa_requirement: 0,
-    ielts_requirement: 0,
-  };
-
-  for (const recommendation of recommendations) {
-    const university = recommendation.university;
-
-    if (university.fields_offered.includes(profile.field_of_study)) {
-      matched.field_of_study += 1;
-    }
-
-    if (
-      profile.preferred_countries.length &&
-      profile.preferred_countries.includes(university.country)
-    ) {
-      matched.preferred_countries += 1;
-    }
-
-    if (
-      profile.budget_usd !== null &&
-      university.tuition_fee_usd <= profile.budget_usd
-    ) {
-      matched.budget += 1;
-    }
-
-    if (profile.gpa >= university.min_gpa) {
-      matched.gpa_requirement += 1;
-    }
-
-    if (
-      profile.ielts_score !== null &&
-      university.min_ielts !== null &&
-      profile.ielts_score >= university.min_ielts
-    ) {
-      matched.ielts_requirement += 1;
-    }
-  }
-
-  return matched;
-}
-
 async function getRecommendations(inputProfile, topK = 5) {
   const started = Date.now();
   const profile = normalizeStudentProfile(inputProfile);
 
-  let eligible = await getEligibleUniversities(profile, true);
-
-  if (eligible.length < topK) {
-    const potential = await getPotentialUniversities(profile);
-    const existing = new Set(eligible.map((uni) => uni.id));
-
-    for (const university of potential) {
-      if (!existing.has(university.id) && eligible.length < topK * 2) {
-        eligible.push(university);
-        existing.add(university.id);
-      }
-    }
-  }
+  const eligible = await getEligibleUniversities(profile);
 
   if (!eligible.length) {
     return {
       recommendations: [],
       total_considered: 0,
       message: "No universities match your criteria",
-      algorithm_version: "v3.0_flexible",
+      algorithm_version: "v4.0_score_based",
       processing_time_ms: Date.now() - started,
-      matched_criteria: {
-        field_of_study: 0,
-        preferred_countries: 0,
-        budget: 0,
-        gpa_requirement: 0,
-        ielts_requirement: 0,
-      },
     };
   }
 
-  const scored = [];
-
-  for (const university of eligible) {
-    const eligibility = calculateEligibilityScore(university, profile);
-    const similarity = await calculateSimilarityScore(university, profile);
-    const finalScore = calculateFinalScore(eligibility, similarity, university);
-
-    if (finalScore >= 0.3) {
-      scored.push({
+  const scored = await Promise.all(
+    eligible.map(async (university) => {
+      const {
+        recommendationScore,
+        recommendationScoreNormalized,
+        matchReasons,
+      } = calculateRecommendationScore(university, profile);
+      const similarityScore = await calculateSimilarityScore(
         university,
-        match_score: finalScore,
-        eligibility_score: eligibility,
-        similarity_score: similarity,
-        final_score: finalScore,
-        reasons: generateReasons(university, eligibility, similarity, profile),
+        profile,
+      );
+
+      return {
+        university,
+        recommendationScore,
+        recommendation_score: recommendationScore,
+        recommendationScoreNormalized,
+        recommendation_score_normalized: recommendationScoreNormalized,
+        recommendationScorePercent: Math.round(
+          recommendationScoreNormalized * 100,
+        ),
+        recommendation_score_percent: Math.round(
+          recommendationScoreNormalized * 100,
+        ),
+        recommendationScoreLabel: recommendationScore,
+        recommendation_score_label: recommendationScore,
+        recommendationScoreReasons: matchReasons,
+        recommendation_score_reasons: matchReasons,
+        recommendationReasons: matchReasons,
+        matchReasons,
+        match_score: recommendationScoreNormalized,
+        eligibility_score: recommendationScoreNormalized,
+        similarity_score: similarityScore,
+        final_score: recommendationScoreNormalized,
+        reasons: matchReasons,
         ranking_tier: rankingTier(university.world_ranking),
-      });
-    }
-  }
+      };
+    }),
+  );
 
-  scored.sort((a, b) => b.final_score - a.final_score);
+  const ranked = scored.sort(
+    (a, b) =>
+      b.recommendationScore - a.recommendationScore ||
+      b.final_score - a.final_score ||
+      b.similarity_score - a.similarity_score,
+  );
 
-  const top = scored.slice(0, topK);
-
-  if (top.length < topK && scored.length > top.length) {
-    const remaining = scored.slice(
-      top.length,
-      Math.min(scored.length, topK * 2),
-    );
-    top.push(...remaining.slice(0, topK - top.length));
-  }
+  const top = ranked.slice(0, topK);
 
   return {
     recommendations: top,
     total_considered: eligible.length,
-    algorithm_version: "v3.0_flexible",
+    algorithm_version: "v4.0_score_based",
     processing_time_ms: Date.now() - started,
-    matched_criteria: getMatchedCriteriaCount(profile, top),
+    matched_criteria: {
+      field_of_study: top.filter((item) =>
+        item.matchReasons.includes("Field of study match"),
+      ).length,
+      preferred_countries: top.filter((item) =>
+        item.matchReasons.includes("Preferred country"),
+      ).length,
+      budget: top.filter((item) => item.matchReasons.includes("Within budget"))
+        .length,
+      gpa_requirement: top.filter((item) =>
+        item.matchReasons.includes("High GPA match"),
+      ).length,
+      ielts_requirement: top.filter((item) =>
+        item.matchReasons.includes("IELTS requirement met"),
+      ).length,
+    },
   };
 }
 
