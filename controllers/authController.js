@@ -114,9 +114,9 @@ exports.login = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(401).json({
+      return res.status(404).json({
         status: "error",
-        message: "Invalid credentials.",
+        message: "You are not registered.",
       });
     }
 
