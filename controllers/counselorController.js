@@ -115,6 +115,31 @@ const parseJsonMetadata = (value) => {
   return value;
 };
 
+const getLatestShortlistUniversityIds = async (studentId) => {
+  const latestShortlistEvent = await prisma.studentActivityEvent.findFirst({
+    where: {
+      studentId,
+      eventType: "PROFILE_UPDATED",
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  const metadata = parseJsonMetadata(latestShortlistEvent?.metadata);
+  if (!metadata || metadata.category !== "SHORTLIST") {
+    return [];
+  }
+
+  const ids = Array.isArray(metadata.shortlistedUniversityIds)
+    ? metadata.shortlistedUniversityIds
+    : [];
+
+  return ids
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0);
+};
+
 const normalizeDocumentReviewStatus = (value) => {
   if (!value) return "Pending";
   const normalized = String(value).trim().toLowerCase();
@@ -687,22 +712,22 @@ exports.getCounselorStudentUniversities = async (req, res) => {
       });
     }
 
-    const recommendationProfile = buildRecommendationProfile(
-      student.userProfile,
-    );
+    const recommendationProfile = buildRecommendationProfile(student.userProfile);
+    const shortlistedUniversityIds =
+      await getLatestShortlistUniversityIds(studentId);
 
-    if (!recommendationProfile) {
-      return res.status(200).json({
-        status: "success",
-        universities: [],
-        message: "Student profile is incomplete for university recommendations",
-      });
+    let recommendationResult = {
+      recommendations: [],
+      total_considered: 0,
+      algorithm_version: null,
+    };
+
+    if (recommendationProfile) {
+      recommendationResult = await recommendationService.getRecommendations(
+        recommendationProfile,
+        topK,
+      );
     }
-
-    const recommendationResult = await recommendationService.getRecommendations(
-      recommendationProfile,
-      topK,
-    );
 
     const universityStatusMap = await getUniversityStatusMap(studentId);
 
@@ -725,14 +750,59 @@ exports.getCounselorStudentUniversities = async (req, res) => {
         reasons: Array.isArray(item.reasons) ? item.reasons : [],
         tuitionFeeUsd: uni.tuition_fee_usd,
         worldRanking: uni.world_ranking,
+        source: "recommended",
       };
     });
+
+    const recommendedIds = new Set(universities.map((uni) => uni.universityId));
+    const shortlistOnlyIds = shortlistedUniversityIds.filter(
+      (id) => !recommendedIds.has(id),
+    );
+
+    if (shortlistOnlyIds.length > 0) {
+      const shortlistOnlyUniversities = await Promise.all(
+        shortlistOnlyIds.map(async (universityId) => {
+          const uni = await recommendationService.getUniversityById(universityId);
+          if (!uni) return null;
+
+          const persistedStatus = universityStatusMap.get(universityId);
+
+          return {
+            id: String(uni.id),
+            universityId: uni.id,
+            name: uni.name,
+            country: uni.country,
+            program: uni.program_name || uni.program_level || "Not specified",
+            status: persistedStatus?.status || "Shortlisted",
+            note: persistedStatus?.note || null,
+            updatedAt: persistedStatus?.updatedAt || null,
+            matchScore: null,
+            eligibilityScore: null,
+            similarityScore: null,
+            reasons: [],
+            tuitionFeeUsd: uni.tuition_fee_usd,
+            worldRanking: uni.world_ranking,
+            source: "shortlisted",
+          };
+        }),
+      );
+
+      universities.push(
+        ...shortlistOnlyUniversities.filter((item) => item !== null),
+      );
+    }
 
     return res.status(200).json({
       status: "success",
       universities,
       totalConsidered: recommendationResult.total_considered,
       algorithmVersion: recommendationResult.algorithm_version,
+      message:
+        !recommendationProfile && universities.length > 0
+          ? "Showing student-shared shortlist while recommendation profile is incomplete"
+          : recommendationProfile
+            ? undefined
+            : "Student profile is incomplete for university recommendations",
     });
   } catch (err) {
     console.error("GET_COUNSELOR_STUDENT_UNIVERSITIES_ERROR:", err);

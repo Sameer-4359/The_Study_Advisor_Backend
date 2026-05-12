@@ -3,9 +3,9 @@ const multerS3 = require("multer-s3");
 const s3 = require("../AWS/aws");
 
 
-const bucketName = 'gp-shah';
+const bucketName = 'study-advisor-373700524650-ap-southeast-2-an';
 
-const cloudFrontUrl = "https://d1z3lwp95i97f9.cloudfront.net";
+const cloudFrontUrl = "https://d1cefetpv4gjb6.cloudfront.net";
 
 const uploadDocuments = multer({
   storage: multerS3({

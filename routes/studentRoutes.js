@@ -7,6 +7,7 @@ const {
 const documentController = require("../controllers/documentController");
 const studentSopController = require("../controllers/studentSopController");
 const studentConnectionController = require("../controllers/studentConnectionController");
+const studentShortlistController = require("../controllers/studentShortlistController");
 const auth = require("../middleware/authMiddleware");
 
 router.use(auth.verifyToken, auth.checkRole("student"));
@@ -63,6 +64,18 @@ router.post(
 router.post(
   "/connection/meeting-request",
   studentConnectionController.requestMeetingWithCounselor,
+);
+router.post(
+  "/inform-counselor",
+  studentShortlistController.informCounselor,
+);
+router.post(
+  "/shortlist/inform-counselor",
+  studentShortlistController.informCounselor,
+);
+router.post(
+  "/connection/inform-counselor",
+  studentShortlistController.informCounselor,
 );
 
 module.exports = router;
