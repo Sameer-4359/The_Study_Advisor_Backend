@@ -24,6 +24,49 @@ const PROGRAM_TYPES = [
   "EXCHANGE",
 ];
 
+function normalizeProgramLevel(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s-]+/g, "");
+
+  if (["bachelor", "bachelors", "bachelor's"].includes(normalized)) {
+    return "Bachelors";
+  }
+
+  if (
+    ["master", "masters", "master's", "researchmasters", "mba"].includes(
+      normalized,
+    )
+  ) {
+    return "Masters";
+  }
+
+  return "";
+}
+
+function normalizeCountryForDb(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  if (["usa", "us", "united states", "united states of america"].includes(normalized)) {
+    return "USA";
+  }
+
+  if (["uk", "united kingdom", "great britain", "britain"].includes(normalized)) {
+    return "UK";
+  }
+
+  const countryMap = {
+    germany: "Germany",
+    france: "France",
+    italy: "Italy",
+  };
+
+  return countryMap[normalized] || String(value || "").trim();
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -38,9 +81,7 @@ function toNumber(value, fallback = null) {
 }
 
 function normalizeCountry(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase();
+  return normalizeCountryForDb(value).toLowerCase();
 }
 
 function parsePreferredCountries(studentProfile) {
@@ -172,7 +213,7 @@ function normalizeStudentProfile(studentProfile) {
     institution_name: studentProfile.institution_name
       ? String(studentProfile.institution_name)
       : null,
-    desired_program: String(studentProfile.desired_program || ""),
+    desired_program: normalizeProgramLevel(studentProfile.desired_program),
     preferred_countries: parsePreferredCountries(studentProfile),
     budget_usd: toNumber(studentProfile.budget_usd),
     preferred_intake: studentProfile.preferred_intake
@@ -208,8 +249,8 @@ function validateStudentProfile(profile) {
     return `current_education_level must be one of: ${EDUCATION_LEVELS.join(", ")}`;
   }
 
-  if (!PROGRAM_TYPES.includes(String(profile.desired_program || ""))) {
-    return `desired_program must be one of: ${PROGRAM_TYPES.join(", ")}`;
+  if (!normalizeProgramLevel(profile.desired_program)) {
+    return "desired_program must be one of: Bachelors, Masters";
   }
 
   return null;
@@ -574,15 +615,26 @@ async function getUniversities({
   const clauses = [];
 
   if (country) {
-    clauses.push(Prisma.sql`country = ${country}`);
+    clauses.push(Prisma.sql`country = ${normalizeCountryForDb(country)}`);
   }
 
   if (programLevel) {
-    clauses.push(Prisma.sql`program_level = ${programLevel}`);
+    const normalizedProgramLevel = normalizeProgramLevel(programLevel);
+    if (normalizedProgramLevel) {
+      clauses.push(Prisma.sql`program_level = ${normalizedProgramLevel}`);
+    }
   }
 
   if (field) {
-    clauses.push(Prisma.sql`${field} = ANY(fields_offered)`);
+    const fieldPattern = `%${String(field).trim().toLowerCase()}%`;
+    clauses.push(Prisma.sql`(
+      LOWER(program_name) LIKE ${fieldPattern}
+      OR EXISTS (
+        SELECT 1
+        FROM unnest(fields_offered) AS offered_field
+        WHERE LOWER(offered_field) LIKE ${fieldPattern}
+      )
+    )`);
   }
 
   const whereSql = clauses.length
